@@ -1,0 +1,101 @@
+{
+  "module": "supplier_management_platform",
+  "version": "1.0.0",
+  "description": "供应商管理数据平台 — 移动端APP + 网页端",
+  "roles": ["supplier", "admin"],
+  "entities": {
+    "suppliers": {
+      "fields": {
+        "id": "uuid PK",
+        "code": "string UQ (5位, 数字+大写字母)",
+        "password_hash": "string",
+        "device_id": "string | null",
+        "is_active": "boolean",
+        "created_at": "timestamp",
+        "updated_at": "timestamp"
+      }
+    },
+    "admins": {
+      "fields": {
+        "id": "uuid PK",
+        "username": "string UQ",
+        "password_hash": "string",
+        "created_at": "timestamp",
+        "updated_at": "timestamp"
+      }
+    },
+    "box_types": {
+      "fields": {
+        "id": "uuid PK",
+        "name": "string UQ",
+        "max_scan_count": "integer",
+        "created_at": "timestamp",
+        "updated_at": "timestamp"
+      }
+    },
+    "code_strings": {
+      "fields": {
+        "id": "uuid PK",
+        "code": "string UQ (22位, 字母+数字混合)",
+        "supplier_id": "uuid FK → suppliers",
+        "box_type_id": "uuid FK → box_types",
+        "scan_count": "integer default=0",
+        "is_deleted": "boolean default=false",
+        "created_at": "timestamp",
+        "updated_at": "timestamp"
+      }
+    },
+    "scan_records": {
+      "fields": {
+        "id": "uuid PK",
+        "code_string_id": "uuid FK → code_strings",
+        "supplier_id": "uuid FK → suppliers",
+        "scanned_at": "timestamp",
+        "device_id": "string",
+        "is_over_limit": "boolean default=false"
+      }
+    },
+    "alert_logs": {
+      "fields": {
+        "id": "uuid PK",
+        "supplier_id": "uuid FK → suppliers",
+        "code_string_id": "uuid FK → code_strings",
+        "message": "string",
+        "created_at": "timestamp"
+      }
+    },
+    "unregistered_attempts": {
+      "fields": {
+        "id": "uuid PK",
+        "code_string": "string",
+        "supplier_id": "uuid FK → suppliers",
+        "attempted_at": "timestamp",
+        "device_id": "string"
+      }
+    },
+    "audit_logs": {
+      "fields": {
+        "id": "uuid PK",
+        "user_type": "enum(supplier, admin)",
+        "user_id": "uuid",
+        "action": "string",
+        "detail": "string",
+        "created_at": "timestamp"
+      }
+    }
+  },
+  "constraints": [
+    "供应商代码为5位数字+大写字母组合",
+    "编码字符串为22位字母+数字混合",
+    "箱种由管理员预设，供应商选择",
+    "扫描次数限制按箱种全局限制",
+    "APP端单设备UUID绑定",
+    "编码字符串逻辑删除保留扫描记录",
+    "密码初始值: 供应商123456, 管理员654321",
+    "密码长度≥6位，无特殊字符要求",
+    "管理员可查看供应商密码（脱敏+复制）",
+    "超限告警记录日志，不做主动推送",
+    "无网络时扫码提示'网络不可用'",
+    "操作日志保留90天"
+  ]
+}

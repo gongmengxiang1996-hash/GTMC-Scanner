@@ -1,0 +1,21 @@
+{
+  "module": "ai_emoji_generation",
+  "version": "1.0.0",
+  "input_schema": {
+    "prompt": "string",
+    "style": ["cartoon", "real_person", "ink", "pixel"],
+    "user_id": "string"
+  },
+  "output_schema": {
+    "success": "boolean",
+    "image_url": "string | null",
+    "format": "png",
+    "dimensions": {"width": 512, "height": 512},
+    "error_code": "string | null"
+  },
+  "constraints": [
+    "style 必须为枚举值之一",
+    "success=false 时必须返回 error_code",
+    "禁止返回非 PNG 格式或尺寸非 512x512 的结构"
+  ]
+}
