@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+﻿import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
@@ -17,7 +17,8 @@ import { MonitorModule } from './monitor/monitor.module';
       password: process.env.DB_PASS || 'postgres',
       database: process.env.DB_NAME || 'supplier_platform',
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: true, // 开发环境自动同步，生产环境改用 migration
+      ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+      synchronize: true,
     }),
     AuthModule,
     SuppliersModule,

@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { parse } from 'csv-parse/sync';
 import { Supplier } from '../database/supplier.entity';
 import { AuditLog, UserType } from '../database/audit-log.entity';

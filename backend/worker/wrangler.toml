@@ -1,0 +1,8 @@
+name = "gtmc-scanner-api"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+JWT_SECRET = "supplier-platform-secret-key-2024"
+DATABASE_URL = "postgresql://neondb_owner:npg_Xha3NSsBq9yL@ep-plain-pine-ao5dtpa3.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
