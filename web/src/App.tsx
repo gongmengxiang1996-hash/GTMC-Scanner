@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import LoginPage from './pages/LoginPage';
 import CodeManagePage from './pages/supplier/CodeManagePage';
+import ImportFailPage from './pages/supplier/ImportFailPage';
 import SupplierManagePage from './pages/admin/SupplierManagePage';
 import BoxTypeManagePage from './pages/admin/BoxTypeManagePage';
 import LogViewPage from './pages/admin/LogViewPage';
@@ -57,6 +58,7 @@ function SupplierLayout({ children }: { children: React.ReactNode }) {
         <div style={{ display: 'flex', gap: 24 }}>
           <span style={{ fontWeight: 'bold' }}>GTMC铁笼标签预扫描系统</span>
           <a href="/supplier/codes" style={{ color: '#fff' }}>编码字符串管理</a>
+          <a href="/supplier/import-failures" style={{ color: '#fff' }}>批量上传失败</a>
         </div>
         <div>
           <span style={{ marginRight: 16 }}>{user?.code}</span>

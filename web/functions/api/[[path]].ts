@@ -96,6 +96,19 @@ function parseCsvSync(text, opts = {}) {
 }
 
 
+// Initialize import_failures table for storing failed CSV import records
+async function ensureImportFailuresTable(db: any) {
+  await db`CREATE TABLE IF NOT EXISTS import_failures (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    supplier_id UUID NOT NULL,
+    file_name TEXT NOT NULL,
+    original_csv TEXT NOT NULL,
+    failed_csv TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+  )`;
+}
+
+
 type Env = {
   Variables: { user: { sub: string; code?: string; username?: string; role: "supplier" | "admin" } };
   Bindings: { JWT_SECRET: string; DATABASE_URL: string };
@@ -521,26 +534,93 @@ app.post("/api/supplier/codes/import", jwtMiddleware, requireRole("supplier"), a
   const delimiter = content.includes("\t") && !content.includes(",") ? "\t" : ",";
   const records: string[][] = parseCsvSync(content, { skip_empty_lines: true, delimiter });
 
+  await ensureImportFailuresTable(db);
+
   const boxTypes = await db`SELECT name, id FROM box_types`;
   const boxTypeMap = new Map(boxTypes.map((bt: any) => [bt.name, bt.id]));
-  const results = { created: 0, skipped: 0, errors: [] as string[] };
+  let created = 0;
+  let failedRows: { row: number; code: string; reason: string }[] = [];
 
   for (let i = 0; i < records.length; i++) {
     const [code, boxTypeName] = (records[i] || []).map((c) => c?.trim());
-    if (!code || !boxTypeName) { results.skipped++; continue; }
-    if (code.length !== 22) { results.skipped++; continue; }
-    const boxTypeId = boxTypeMap.get(boxTypeName);
-    if (!boxTypeId) { results.skipped++; continue; }
-    const err = validateCodeString(code, user.code!, boxTypeName);
-    if (err) { results.skipped++; continue; }
-    const [existing] = await db`SELECT id FROM code_strings WHERE code = ${code} AND is_deleted = false`;
-    if (existing) { results.skipped++; continue; }
-    await db`INSERT INTO code_strings (code, supplier_id, box_type_id) VALUES (${code}, ${user.sub}, ${boxTypeId})`;
-    results.created++;
+    let reason = "";
+    if (!code || !boxTypeName) { reason = "缺少编码或箱种名称"; }
+    else if (code.length !== 22) { reason = "第1位到第22位字符错误，请检查"; }
+    else {
+      const boxTypeId = boxTypeMap.get(boxTypeName);
+      if (!boxTypeId) { reason = "箱种名称不存在"; }
+      else {
+        const err = validateCodeString(code, user.code!, boxTypeName);
+        if (err) {
+          reason = err;
+        } else {
+          const [existing] = await db`SELECT id FROM code_strings WHERE code = ${code} AND is_deleted = false`;
+          if (existing) { reason = "该编码已存在"; }
+          else {
+            await db`INSERT INTO code_strings (code, supplier_id, box_type_id) VALUES (${code}, ${user.sub}, ${boxTypeId})`;
+            created++;
+          }
+        }
+      }
+    }
+    if (reason) {
+      failedRows.push({ row: i + 2, code: code || "", reason });
+    }
   }
-  return c.json(results);
+
+  // Save failed records to DB for later download
+  let failureId = null;
+  if (failedRows.length > 0) {
+    const originalFileName = file.name || "import.csv";
+    const originalCsv = content;
+    let failedCsv = "编码,箱种名称,失败原因\n";
+    for (const fr of failedRows) {
+      const rowIdx = fr.row - 2;
+      if (rowIdx >= 0 && rowIdx < records.length) {
+        failedCsv += records[rowIdx].join(",") + "," + fr.reason + "\n";
+      }
+    }
+    const [inserted] = await db`INSERT INTO import_failures (supplier_id, file_name, original_csv, failed_csv) VALUES (${user.sub}, ${originalFileName}, ${originalCsv}, ${failedCsv}) RETURNING id`;
+    failureId = inserted.id;
+  }
+
+  // Cleanup expired records (>48 hours)
+  await db`DELETE FROM import_failures WHERE created_at < NOW() - INTERVAL '48 hours' AND supplier_id = ${user.sub}`;
+
+  return c.json({ created, total: records.length, failed: failedRows.length, failure_id: failureId });
 });
 
+
+// ---------- IMPORT FAILURES ----------
+app.get("/api/supplier/codes/import-failures", jwtMiddleware, requireRole("supplier"), async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const user = c.get("user");
+  const page = parseInt(c.req.query("page") || "1");
+  const pageSize = parseInt(c.req.query("pageSize") || "20");
+  const offset = (page - 1) * pageSize;
+
+  await ensureImportFailuresTable(db);
+
+  // Cleanup expired records (>48 hours)
+  await db`DELETE FROM import_failures WHERE created_at < NOW() - INTERVAL '48 hours' AND supplier_id = ${user.sub}`;
+
+  const [{ count }] = await db`SELECT COUNT(*) as count FROM import_failures WHERE supplier_id = ${user.sub}`;
+  const items = await db`SELECT id, file_name, created_at FROM import_failures WHERE supplier_id = ${user.sub} ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+  return c.json({ list: items, total: parseInt(count), page, pageSize });
+});
+
+app.get("/api/supplier/codes/import-failures/:id/download", jwtMiddleware, requireRole("supplier"), async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const user = c.get("user");
+  const [record] = await db`SELECT * FROM import_failures WHERE id = ${c.req.param("id")} AND supplier_id = ${user.sub}`;
+  if (!record) throw new HTTPException(404, { message: "记录不存在" });
+  return new Response(record.failed_csv, {
+    headers: {
+      "Content-Type": "text/csv;charset=utf-8",
+      "Content-Disposition": `attachment; filename="${record.file_name.replace(/.csv$/i, "")}_失败原因.csv"`
+    },
+  });
+});
 // ---------- SCAN ----------
 app.post("/api/scan", jwtMiddleware, requireRole("supplier"), async (c) => {
   const db = getDb(c.env.DATABASE_URL);
