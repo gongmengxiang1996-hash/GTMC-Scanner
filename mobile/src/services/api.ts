@@ -6,9 +6,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 //    cmd 输入 ipconfig 查看 "无线局域网适配器 WLAN" 的 IPv4 地址
 const DEV_SERVER_IP = '192.168.31.60';
 
-const BASE_URL = __DEV__
-  ? 'http://localhost:3000/api'  // ADB reverse 转发到电脑，切换WiFi无需改IP
-  : 'http://localhost:3000/api'; // 生产环境按实际部署地址修改
+const BASE_URL = 'https://gtmc-scanner.pages.dev/api';
+
+
 
 const api = axios.create({
   baseURL: BASE_URL,

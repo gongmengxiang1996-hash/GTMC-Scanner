@@ -30,7 +30,12 @@ export default function ScanScreen() {
   const device = useCameraDevice('back');
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showMismatchModal, setShowMismatchModal] = useState(false);
+  const [pendingMismatchCode, setPendingMismatchCode] = useState<string | null>(null);
   const isScanning = useRef(false);
+  const lastScannedCode = useRef<string | null>(null);
+  const lastScanCount = useRef<number>(0);
+  const lastMaxScanCount = useRef<number>(0);
 
   useEffect(() => {
     if (!hasPermission) {
@@ -38,22 +43,58 @@ export default function ScanScreen() {
     }
   }, [hasPermission]);
 
-  const handleBarCodeScanned = useCallback(async (code: string) => {
-    if (isScanning.current) return;
-    isScanning.current = true;
+  const doScan = useCallback(async (code: string) => {
     try {
       const deviceId = await getDeviceId();
       const res = await api.post('/scan', { code, device_id: deviceId });
       const result: ScanResult = res.data;
+
+      if (result.success) {
+        lastScannedCode.current = code;
+        lastScanCount.current = result.scan_count ?? 0;
+        lastMaxScanCount.current = result.max_scan_count ?? 0;
+      }
+
       setLastResult(result);
       setShowModal(true);
     } catch (e: any) {
       const msg = e.response?.data?.message || '网络不可用';
       setLastResult({ success: false, message: msg, error_code: 'NETWORK_ERROR' });
       setShowModal(true);
-    } finally {
-      setTimeout(() => { isScanning.current = false; }, 1500);
     }
+  }, []);
+
+  const handleBarCodeScanned = useCallback(async (code: string) => {
+    if (isScanning.current) return;
+
+    if (lastScannedCode.current !== null
+      && code !== lastScannedCode.current
+      && lastScanCount.current < lastMaxScanCount.current
+    ) {
+      setPendingMismatchCode(code);
+      setShowMismatchModal(true);
+      return;
+    }
+
+    isScanning.current = true;
+    await doScan(code);
+    setTimeout(() => { isScanning.current = false; }, 1500);
+  }, [doScan]);
+
+  const handleMismatchContinue = useCallback(async () => {
+    setShowMismatchModal(false);
+    const code = pendingMismatchCode;
+    setPendingMismatchCode(null);
+    if (!code) return;
+
+    isScanning.current = true;
+    await doScan(code);
+    setTimeout(() => { isScanning.current = false; }, 1500);
+  }, [pendingMismatchCode, doScan]);
+
+  const handleMismatchCancel = useCallback(() => {
+    setShowMismatchModal(false);
+    setPendingMismatchCode(null);
   }, []);
 
   const codeScanner = useCodeScanner({
@@ -120,12 +161,12 @@ export default function ScanScreen() {
         {lastResult ? (
           <>
             <Text style={[styles.resultText, { color: getResultColor() }]}>
-              {lastResult.success ? '✔ 扫描成功' : '✖ ' + lastResult.message}
+              {lastResult.success ? 'OK 扫描成功' : 'FAIL ' + lastResult.message}
             </Text>
             {lastResult.scan_count !== undefined && (
               <Text style={styles.scanCount}>
                 已扫描 {lastResult.scan_count} / {lastResult.max_scan_count} 次
-                {lastResult.box_type && ` (${lastResult.box_type})`}
+                {lastResult.box_type && ' (' + lastResult.box_type + ')'}
               </Text>
             )}
           </>
@@ -134,6 +175,48 @@ export default function ScanScreen() {
         )}
       </View>
 
+      {/* Mismatch confirmation modal */}
+      <Modal
+        visible={showMismatchModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleMismatchCancel}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.mismatchTitle}>箱标签不匹配</Text>
+            <Text style={styles.mismatchWarn}>请确认是否继续</Text>
+            {lastScannedCode.current && (
+              <View style={styles.modalRow}>
+                <Text style={styles.modalLabel}>上一个编码</Text>
+                <Text style={styles.modalCode}>{lastScannedCode.current}</Text>
+              </View>
+            )}
+            {pendingMismatchCode && (
+              <View style={styles.modalRow}>
+                <Text style={styles.modalLabel}>当前编码</Text>
+                <Text style={styles.modalCode}>{pendingMismatchCode}</Text>
+              </View>
+            )}
+            <View style={styles.mismatchBtnRow}>
+              <TouchableOpacity
+                style={[styles.mismatchBtn, styles.mismatchBtnCancel]}
+                onPress={handleMismatchCancel}
+              >
+                <Text style={styles.mismatchBtnCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.mismatchBtn, styles.mismatchBtnConfirm]}
+                onPress={handleMismatchContinue}
+              >
+                <Text style={styles.mismatchBtnConfirmText}>继续</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Scan result modal */}
       <Modal
         visible={showModal}
         transparent
@@ -183,7 +266,7 @@ export default function ScanScreen() {
                     <Text style={styles.modalLabel}>扫描次数</Text>
                     <Text style={styles.modalValue}>
                       已扫 {lastResult.scan_count} 次 / 上限 {lastResult.max_scan_count} 次
-                      {remaining != null && `（剩余 ${remaining} 次）`}
+                      {remaining != null && '（剩余' + remaining + ' 次）'}
                     </Text>
                   </View>
                 )}
@@ -261,4 +344,14 @@ const styles = StyleSheet.create({
   modalBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   overLimitWarn: { fontSize: 16, color: '#333', textAlign: 'center', marginBottom: 12, lineHeight: 24 },
   overLimitCode: { fontSize: 13, color: '#888', fontFamily: 'monospace', marginBottom: 20 },
+
+  // Mismatch modal styles
+  mismatchTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 8, color: '#fa8c16' },
+  mismatchWarn: { fontSize: 16, color: '#333', textAlign: 'center', marginBottom: 20, lineHeight: 24 },
+  mismatchBtnRow: { flexDirection: 'row', marginTop: 8, gap: 12 },
+  mismatchBtn: { flex: 1, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  mismatchBtnCancel: { backgroundColor: '#f0f0f0' },
+  mismatchBtnConfirm: { backgroundColor: '#1677ff' },
+  mismatchBtnCancelText: { color: '#666', fontSize: 16, fontWeight: '600' },
+  mismatchBtnConfirmText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
