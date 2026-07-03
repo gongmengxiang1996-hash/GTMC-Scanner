@@ -10,6 +10,11 @@ export function getDb(connectionString: string) {
   }
   return _sql;
 }
+// Helper for parameterized queries (Neon v1+ dropped direct sql() calls, use .query())
+export function queryDb(sql: any, queryStr: string, ...params: any[]) {
+  return (sql as any).query(queryStr, params);
+}
+
 
 // src/auth.ts
 import { createMiddleware } from "hono/factory";
@@ -165,8 +170,8 @@ app.get("/api/admin/suppliers", jwtMiddleware, requireRole("admin"), async (c) =
   itemsSql += " ORDER BY created_at DESC LIMIT $" + (itemsParams.length + 1) + " OFFSET $" + (itemsParams.length + 2);
   itemsParams.push(pageSize, offset);
 
-  const [{ count }] = await (db as any).query(countSql, ...countParams);
-  const items = await (db as any).query(itemsSql, ...itemsParams);
+  const [{ count }] = await queryDb(db, countSql, ...countParams);
+  const items = await queryDb(db, itemsSql, ...itemsParams);
 
   return c.json({
     list: items.map((s: any) => ({ ...s, password_masked: "******" })),
@@ -327,16 +332,16 @@ app.get("/api/admin/monitor/alert-logs", jwtMiddleware, requireRole("admin"), as
   if (search) {
     logSql = "SELECT COUNT(*) as count FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1";
     logParams.push("%" + search + "%");
-    var [countRow] = await (db as any).query(logSql, ...logParams);
+    var [countRow] = await queryDb(db, logSql, ...logParams);
     var totalCount = countRow.count;
     logSql = "SELECT al.id, al.message, al.is_reset, al.created_at, s.code as supplier_code, cs.code as code_string FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1 ORDER BY al.created_at DESC LIMIT $2 OFFSET $3";
     logParams.push(pageSize, offset);
-    var items = await (db as any).query(logSql, ...logParams);
+    var items = await queryDb(db, logSql, ...logParams);
   } else {
-    var [countRow] = await (db as any).query("SELECT COUNT(*) as count FROM alert_logs");
+    var [countRow] = await queryDb(db, "SELECT COUNT(*) as count FROM alert_logs");
     var totalCount = countRow.count;
     logSql += " ORDER BY al.created_at DESC LIMIT $1 OFFSET $2";
-    var items = await (db as any).query(logSql, pageSize, offset);
+    var items = await queryDb(db, logSql, pageSize, offset);
   }
   return c.json({ list: items, total: parseInt(totalCount), page, pageSize });
 
@@ -427,8 +432,8 @@ app.get("/api/supplier/codes", jwtMiddleware, requireRole("supplier"), async (c)
   itemsSql += " ORDER BY cs.created_at DESC LIMIT $" + paramIdx + " OFFSET $" + (paramIdx + 1);
   sqlParams.push(pageSize, offset);
 
-  const [{ count }] = await (db as any).query(countSql, ...sqlParams.slice(0, sqlParams.length - 2));
-  const items = await (db as any).query(itemsSql, ...sqlParams);
+  const [{ count }] = await queryDb(db, countSql, ...sqlParams.slice(0, sqlParams.length - 2));
+  const items = await queryDb(db, itemsSql, ...sqlParams);
   return c.json({ list: items, total: parseInt(count), page, pageSize });
 
 app.post("/api/supplier/codes", jwtMiddleware, requireRole("supplier"), async (c) => {
