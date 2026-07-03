@@ -405,8 +405,21 @@ app.get("/api/admin/monitor/audit-logs", jwtMiddleware, requireRole("admin"), as
 
 // ---------- SUPPLIER: CODES ----------
 function validateCodeString(code: string, supplierCode: string, boxTypeName: string): string | null {
-  // Basic format validation: must be exactly 22 characters
-  if (code.length !== 22) return "必须为22位编码";
+  const first = code[0];
+  if (first !== "A" && first !== "W" && first !== "R") return `第1位字符必须为 A、W、R 之一，当前为 "${first}"`;
+  if (code.substring(1, 6) !== supplierCode) return `第2-6位必须与供应商代码 ${supplierCode} 一致`;
+  const now = new Date();
+  const currentYear2 = String(now.getFullYear()).slice(-2);
+  const currentMonth = now.getMonth() + 1;
+  const yearPart = code.substring(6, 8);
+  const monthPart = code.substring(8, 10);
+  if (!/^\d{2}$/.test(yearPart) || !/^\d{2}$/.test(monthPart)) return `第7-10位必须为4位数字（年份后两位+月份）`;
+  if (yearPart !== currentYear2) return `第7-8位年份必须为 ${currentYear2}`;
+  if (parseInt(monthPart) < 1 || parseInt(monthPart) > 12) return `第9-10位月份无效`;
+  if (parseInt(monthPart) > currentMonth) return `第9-10位月份 ${monthPart} 超过当前月份`;
+  const expectedBoxPart = boxTypeName.padEnd(9, "0");
+  if (code.substring(10, 19) !== expectedBoxPart) return `第11-19位箱种代码错误`;
+  if (!/^\d{3}$/.test(code.substring(19, 22))) return `第20-22位必须为3位数字`;
   return null;
 }
 
