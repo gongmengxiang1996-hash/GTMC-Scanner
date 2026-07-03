@@ -165,8 +165,8 @@ app.get("/api/admin/suppliers", jwtMiddleware, requireRole("admin"), async (c) =
   itemsSql += " ORDER BY created_at DESC LIMIT $" + (itemsParams.length + 1) + " OFFSET $" + (itemsParams.length + 2);
   itemsParams.push(pageSize, offset);
 
-  const [{ count }] = await db.query(countSql, ...countParams);
-  const items = await db.query(itemsSql, ...itemsParams);
+  const [{ count }] = await (db as any).query(countSql, ...countParams);
+  const items = await (db as any).query(itemsSql, ...itemsParams);
 
   return c.json({
     list: items.map((s: any) => ({ ...s, password_masked: "******" })),
@@ -327,16 +327,16 @@ app.get("/api/admin/monitor/alert-logs", jwtMiddleware, requireRole("admin"), as
   if (search) {
     logSql = "SELECT COUNT(*) as count FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1";
     logParams.push("%" + search + "%");
-    var [countRow] = await db.query(logSql, ...logParams);
+    var [countRow] = await (db as any).query(logSql, ...logParams);
     var totalCount = countRow.count;
     logSql = "SELECT al.id, al.message, al.is_reset, al.created_at, s.code as supplier_code, cs.code as code_string FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1 ORDER BY al.created_at DESC LIMIT $2 OFFSET $3";
     logParams.push(pageSize, offset);
-    var items = await db.query(logSql, ...logParams);
+    var items = await (db as any).query(logSql, ...logParams);
   } else {
-    var [countRow] = await db.query("SELECT COUNT(*) as count FROM alert_logs");
+    var [countRow] = await (db as any).query("SELECT COUNT(*) as count FROM alert_logs");
     var totalCount = countRow.count;
     logSql += " ORDER BY al.created_at DESC LIMIT $1 OFFSET $2";
-    var items = await db.query(logSql, pageSize, offset);
+    var items = await (db as any).query(logSql, pageSize, offset);
   }
   return c.json({ list: items, total: parseInt(totalCount), page, pageSize });
 
@@ -427,8 +427,8 @@ app.get("/api/supplier/codes", jwtMiddleware, requireRole("supplier"), async (c)
   itemsSql += " ORDER BY cs.created_at DESC LIMIT $" + paramIdx + " OFFSET $" + (paramIdx + 1);
   sqlParams.push(pageSize, offset);
 
-  const [{ count }] = await db.query(countSql, ...sqlParams.slice(0, sqlParams.length - 2));
-  const items = await db.query(itemsSql, ...sqlParams);
+  const [{ count }] = await (db as any).query(countSql, ...sqlParams.slice(0, sqlParams.length - 2));
+  const items = await (db as any).query(itemsSql, ...sqlParams);
   return c.json({ list: items, total: parseInt(count), page, pageSize });
 
 app.post("/api/supplier/codes", jwtMiddleware, requireRole("supplier"), async (c) => {
