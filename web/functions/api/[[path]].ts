@@ -3,16 +3,36 @@
 import { neon, NeonQueryFunction } from "@neondatabase/serverless";
 
 let _sql: NeonQueryFunction<any, any> | null = null;
+let _connStr: string = "";
 
 export function getDb(connectionString: string) {
   if (!_sql) {
     _sql = neon(connectionString);
+    _connStr = connectionString;
   }
   return _sql;
 }
-// Helper for parameterized queries (Neon v1+ dropped direct sql() calls, use .query())
-export function queryDb(sql: any, queryStr: string, ...params: any[]) {
-  return (sql as any).query(queryStr, params);
+// Helper: execute parameterized SQL via Neon HTTP API (avoids tagged-template issues)
+export async function queryDb(sql: any, queryStr: string, ...params: any[]) {
+  const url = new URL(_connStr);
+  const host = url.hostname;
+  const httpEndpoint = `https://${host}/sql`;
+  const response = await fetch(httpEndpoint, {
+    method: "POST",
+    headers: {
+      "Neon-Connection-String": _connStr,
+      "Neon-Raw-Text-Output": "true",
+      "Neon-Array-Mode": "true",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: queryStr, params }),
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(errText);
+  }
+  const result: any = await response.json();
+  return result.rows;
 }
 
 
