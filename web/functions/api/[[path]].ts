@@ -177,7 +177,6 @@ app.get("/api/admin/suppliers", jwtMiddleware, requireRole("admin"), async (c) =
     list: items.map((s: any) => ({ ...s, password_masked: "******" })),
     total: parseInt(count), page, pageSize,
   });
-  });
 });
 
 app.get("/api/admin/suppliers/:id", jwtMiddleware, requireRole("admin"), async (c) => {
