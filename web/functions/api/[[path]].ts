@@ -22,7 +22,7 @@ export async function queryDb(sql: any, queryStr: string, ...params: any[]) {
     headers: {
       "Neon-Connection-String": _connStr,
       "Neon-Raw-Text-Output": "true",
-      "Neon-Array-Mode": "true",
+      "Neon-Array-Mode": "false",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query: queryStr, params }),
@@ -363,7 +363,7 @@ app.get("/api/admin/monitor/alert-logs", jwtMiddleware, requireRole("admin"), as
     var items = await queryDb(db, logSql, pageSize, offset);
   }
   return c.json({ list: items, total: parseInt(totalCount), page, pageSize });
-
+});
 app.put("/api/admin/monitor/alert-logs/:id/reset", jwtMiddleware, requireRole("admin"), async (c) => {
   const db = getDb(c.env.DATABASE_URL);
   const [alert] = await db`SELECT id FROM alert_logs WHERE id = ${c.req.param("id")}`;
@@ -454,7 +454,7 @@ app.get("/api/supplier/codes", jwtMiddleware, requireRole("supplier"), async (c)
   const [{ count }] = await queryDb(db, countSql, ...sqlParams.slice(0, sqlParams.length - 2));
   const items = await queryDb(db, itemsSql, ...sqlParams);
   return c.json({ list: items, total: parseInt(count), page, pageSize });
-
+});
 app.post("/api/supplier/codes", jwtMiddleware, requireRole("supplier"), async (c) => {
   const db = getDb(c.env.DATABASE_URL);
   const user = c.get("user");
