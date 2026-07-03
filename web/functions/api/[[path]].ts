@@ -346,14 +346,14 @@ app.get("/api/admin/monitor/alert-logs", jwtMiddleware, requireRole("admin"), as
   const search = c.req.query("search");
   const offset = (page - 1) * pageSize;
 
-  let logSql = "SELECT al.id, al.message, al.is_reset, al.created_at, s.code as supplier_code, cs.code as code_string FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id";
+  let logSql = "SELECT al.id, al.message, al.is_reset, al.created_at, s.code as supplier_code, cs.code as code_string, cs.scan_count FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id";
   let logParams: any[] = [];
   if (search) {
     logSql = "SELECT COUNT(*) as count FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1";
     logParams.push("%" + search + "%");
     var [countRow] = await queryDb(db, logSql, ...logParams);
     var totalCount = countRow.count;
-    logSql = "SELECT al.id, al.message, al.is_reset, al.created_at, s.code as supplier_code, cs.code as code_string FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1 ORDER BY al.created_at DESC LIMIT $2 OFFSET $3";
+    logSql = "SELECT al.id, al.message, al.is_reset, al.created_at, s.code as supplier_code, cs.code as code_string, cs.scan_count FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1 ORDER BY al.created_at DESC LIMIT $2 OFFSET $3";
     logParams.push(pageSize, offset);
     var items = await queryDb(db, logSql, ...logParams);
   } else {
