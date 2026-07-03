@@ -83,11 +83,14 @@ export default function LogViewPage() {
       title: '标签重置状态', dataIndex: 'is_reset', width: 120,
       render: (v) => v ? <Tag color="green">已重置</Tag> : <Tag color="orange">未重置</Tag>,
     },
+    { title: '扫描次数', dataIndex: 'scan_count', width: 80, render: (v) => v != null ? v : '-' },
     { title: '时间', dataIndex: 'created_at', width: 170, render: (v) => new Date(v).toLocaleString() },
     {
       title: '操作', key: 'actions', width: 100,
       render: (_, record) => (
-        record.is_reset ? null : (
+        record.is_reset ? (
+          <span style={{ color: '#999' }}>已重置</span>
+        ) : (
           <Popconfirm title="确定重置该告警？" onConfirm={() => handleResetAlert(record.id)}>
             <Button type="link" size="small" icon={<ReloadOutlined />} style={{ color: '#1677ff' }}>
               重置
