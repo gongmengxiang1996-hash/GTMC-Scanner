@@ -152,16 +152,26 @@ app.get("/api/admin/suppliers", jwtMiddleware, requireRole("admin"), async (c) =
   const search = c.req.query("search");
   const offset = (page - 1) * pageSize;
 
-  let where = "";
-  let params: any[] = [];
-  if (search) { where = "WHERE code ILIKE " + search; params = [`%${search}%`]; }
+  let countSql = "SELECT COUNT(*) as count FROM suppliers";
+  let itemsSql = "SELECT id, code, device_id, is_active, created_at FROM suppliers";
+  let countParams: any[] = [];
+  let itemsParams: any[] = [];
+  if (search) {
+    countSql += " WHERE code ILIKE $" + (countParams.length + 1);
+    countParams.push("%" + search + "%");
+    itemsSql += " WHERE code ILIKE $" + (itemsParams.length + 1);
+    itemsParams.push("%" + search + "%");
+  }
+  itemsSql += " ORDER BY created_at DESC LIMIT $" + (itemsParams.length + 1) + " OFFSET $" + (itemsParams.length + 2);
+  itemsParams.push(pageSize, offset);
 
-  const [{ count }] = await db`SELECT COUNT(*) as count FROM suppliers ${where}`;
-  const items = await db`SELECT id, code, device_id, is_active, created_at FROM suppliers ${where} ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+  const [{ count }] = await db(countSql, ...countParams);
+  const items = await db(itemsSql, ...itemsParams);
 
   return c.json({
     list: items.map((s: any) => ({ ...s, password_masked: "******" })),
     total: parseInt(count), page, pageSize,
+  });
   });
 });
 
@@ -312,18 +322,23 @@ app.get("/api/admin/monitor/alert-logs", jwtMiddleware, requireRole("admin"), as
   const search = c.req.query("search");
   const offset = (page - 1) * pageSize;
 
-  const [{ count }] = await db`SELECT COUNT(*) as count FROM alert_logs`;
-  const items = await db`
-    SELECT al.id, al.message, al.is_reset, al.created_at,
-           s.code as supplier_code, cs.code as code_string
-    FROM alert_logs al
-    LEFT JOIN suppliers s ON al.supplier_id = s.id
-    LEFT JOIN code_strings cs ON al.code_string_id = cs.id
-    ${search ? "WHERE cs.code ILIKE " + search : ""}
-    ORDER BY al.created_at DESC LIMIT ${pageSize} OFFSET ${offset}
-  `;
-  return c.json({ list: items, total: parseInt(count), page, pageSize });
-});
+  let logSql = "SELECT al.id, al.message, al.is_reset, al.created_at, s.code as supplier_code, cs.code as code_string FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id";
+  let logParams: any[] = [];
+  if (search) {
+    logSql = "SELECT COUNT(*) as count FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1";
+    logParams.push("%" + search + "%");
+    var [countRow] = await db(logSql, ...logParams);
+    var totalCount = countRow.count;
+    logSql = "SELECT al.id, al.message, al.is_reset, al.created_at, s.code as supplier_code, cs.code as code_string FROM alert_logs al LEFT JOIN suppliers s ON al.supplier_id = s.id LEFT JOIN code_strings cs ON al.code_string_id = cs.id WHERE cs.code ILIKE $1 ORDER BY al.created_at DESC LIMIT $2 OFFSET $3";
+    logParams.push(pageSize, offset);
+    var items = await db(logSql, ...logParams);
+  } else {
+    var [countRow] = await db("SELECT COUNT(*) as count FROM alert_logs");
+    var totalCount = countRow.count;
+    logSql += " ORDER BY al.created_at DESC LIMIT $1 OFFSET $2";
+    var items = await db(logSql, pageSize, offset);
+  }
+  return c.json({ list: items, total: parseInt(totalCount), page, pageSize });
 
 app.put("/api/admin/monitor/alert-logs/:id/reset", jwtMiddleware, requireRole("admin"), async (c) => {
   const db = getDb(c.env.DATABASE_URL);
@@ -393,19 +408,28 @@ app.get("/api/supplier/codes", jwtMiddleware, requireRole("supplier"), async (c)
   const box_type_id = c.req.query("box_type_id");
   const offset = (page - 1) * pageSize;
 
-  let where = "WHERE cs.supplier_id = " + user.sub + " AND cs.is_deleted = false";
-  if (search) where += " AND cs.code ILIKE " + search;
-  if (box_type_id) where += " AND cs.box_type_id = " + box_type_id;
+  let sqlParams = [user.sub];
+  let countSql = "SELECT COUNT(*) as count FROM code_strings cs WHERE cs.supplier_id = $1 AND cs.is_deleted = false";
+  let itemsSql = "SELECT cs.id, cs.code, cs.scan_count, cs.box_type_id, cs.created_at, bt.name as box_type_name FROM code_strings cs LEFT JOIN box_types bt ON cs.box_type_id = bt.id WHERE cs.supplier_id = $1 AND cs.is_deleted = false";
+  let paramIdx = 2;
+  if (search) {
+    countSql += " AND cs.code ILIKE $" + paramIdx;
+    itemsSql += " AND cs.code ILIKE $" + paramIdx;
+    sqlParams.push("%" + search + "%");
+    paramIdx++;
+  }
+  if (box_type_id) {
+    countSql += " AND cs.box_type_id = $" + paramIdx;
+    itemsSql += " AND cs.box_type_id = $" + paramIdx;
+    sqlParams.push(box_type_id);
+    paramIdx++;
+  }
+  itemsSql += " ORDER BY cs.created_at DESC LIMIT $" + paramIdx + " OFFSET $" + (paramIdx + 1);
+  sqlParams.push(pageSize, offset);
 
-  const [{ count }] = await db`SELECT COUNT(*) as count FROM code_strings cs ${where}`;
-  const items = await db`
-    SELECT cs.id, cs.code, cs.scan_count, cs.box_type_id, cs.created_at, bt.name as box_type_name
-    FROM code_strings cs
-    LEFT JOIN box_types bt ON cs.box_type_id = bt.id
-    ${where} ORDER BY cs.created_at DESC LIMIT ${pageSize} OFFSET ${offset}
-  `;
+  const [{ count }] = await db(countSql, ...sqlParams.slice(0, sqlParams.length - 2));
+  const items = await db(itemsSql, ...sqlParams);
   return c.json({ list: items, total: parseInt(count), page, pageSize });
-});
 
 app.post("/api/supplier/codes", jwtMiddleware, requireRole("supplier"), async (c) => {
   const db = getDb(c.env.DATABASE_URL);
